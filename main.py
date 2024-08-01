@@ -29,6 +29,9 @@ async def on_ready():
             print(f'  {guild.name} -> ({guild.id})')
 # dice roller
 
+# TODO please put these two in separate files; i'd like to have a system where we create a new python file for a command, and have one python file for class defs and stuff
+# this is why i like typescript more :/
+
 class DiceType(Enum):
     D4 = 4
     D6 = 6
