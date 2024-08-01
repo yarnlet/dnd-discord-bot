@@ -1,82 +1,57 @@
+import os
+import dotenv
+import random
+import datetime
+import typing
+
 import discord
+from discord.ext import commands
 from discord import app_commands
 
-from enum import Enum
-import random
+dotenv.load_dotenv() # NOTE to set the token, create your own .env file, and add the line "token=YOUR_TOKEN_HERE"
+TOKEN = os.getenv('token')
+VERBOSE_MODE = os.getenv('verbose_mode', 'false').lower() == 'true' # NOTE set this to True to enable verbose logging mode
 
-MY_GUILD = discord.Object(id=1268010874694799511)  # replace with your guild id
+bot = commands.Bot(command_prefix='dnd ', help_command=None, intents=discord.Intents.default())
 
-class MyClient(discord.Client):
-    def __init__(self, *, intents: discord.Intents):
-        super().__init__(intents=intents)
-        # A CommandTree is a special type that holds all the application command
-        # state required to make it work. This is a separate class because it
-        # allows all the extra state to be opt-in.
-        # Whenever you want to work with application commands, your tree is used
-        # to store and work with them.
-        # Note: When using commands.Bot instead of discord.Client, the bot will
-        # maintain its own tree instead.
-        self.tree = app_commands.CommandTree(self)
-
-    # In this basic example, we just synchronize the app commands to one guild.
-    # Instead of specifying a guild to every command, we copy over our global commands instead.
-    # By doing so, we don't have to wait up to an hour until they are shown to the end-user.
-    async def setup_hook(self):
-        # This copies the global commands over to your guild.
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.tree.sync(guild=MY_GUILD)
-
-intents = discord.Intents.default()
-
-client = MyClient(intents=intents)
-
-@client.event
+@bot.event
 async def on_ready():
-    print(f'We have logged in as {client.user}')
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-# dice roller
-
-class DiceType(Enum):
-    D4 = 4
-    D6 = 6
-    D8 = 8
-    D10 = 10
-    D12 = 12
-    D20 = 20
-    def __str__(self):
-        return f'D{self.value}'
-    def roll(self):
-        return random.randint(1, self.value)
-
-@client.tree.command()
-@app_commands.describe(
-    count='How many dice to roll.',
-    dice_type='Which dice you want to roll.',
-    modifier='Modifier is applied after all dice have been rolled.'
-)
-async def roll(interaction: discord.Interaction, count: int, dice_type: DiceType, modifier: int):
-    """Says hello!"""
-    embed=discord.Embed(
-        title="Dice Roller",
-        description=f'You rolled a {count}{dice_type} **{"+" if modifier >= 0 else "-"}{abs(modifier)}**. Let\'s see how it turned out',
-        color=discord.Color.red()
-        )
-    dicestring = ""
-    runningcount = 0
-    for dicenum in range(count):
-        runningcount += dice_type.roll()
-        dicestring += f'Dice {dicenum + 1}: {dice_type.roll()}\n'
-    embed.add_field(name="Dice Outcomes", value=dicestring, inline=False)
-    embed.add_field(name="Dice Total", value=f'Base: {runningcount}\nWith Modifier: {runningcount} **{"+" if modifier >= 0 else "-"}{abs(modifier)}** = {runningcount + modifier}', inline=True)
+    print(f'Logged in as {bot.user.name}#{bot.user.discriminator} ({bot.user.id})')
+    synced = await bot.tree.sync()
+    print(f'Synced {len(synced)} hybrid commands!')
     
+    if VERBOSE_MODE:
+        guilds = bot.guilds
+        print(f'Connected to {len(guilds)} guilds!')
+        for guild in guilds:
+            print(f'  {guild.name} -> ({guild.id})')
 
-    await interaction.response.send_message(embed=embed)
-    # await interaction.response.send_message(f'Okay, you rolled {count}{dice_type}')
+@bot.hybrid_command(name="roll", description="Roll one or multiple dice") # TODO use a universal class for Dice in order to make future commands easier to implement
+async def roll(ctx, die: str, count: int = 1, stat: str = None):
+    if die in ['d100', 'd20', 'd12', 'd10', 'd8', 'd6', 'd4']: # check if the die type is valid
+        pass
+    else:
+        await ctx.send("Invalid die type. Please use d4, d6, d8, d12, d20, or d100.")
+        return
+    sides = int(die[1:]) # grab the number of sides from the die type
+    rolls = [random.randint(1, sides) for _ in range(count)] # roll the die the specified number of times
 
+    stat_header = f" for {stat}" if stat != None else "" # REVIEW after implementing character sheets, deprecate this feature
+    embed = discord.Embed(title=f"Rolling {count}d{sides}{stat_header}", description=f"{rolls} -> {sum(rolls)}") # CLEANUP this part is messy af
+    for roll in enumerate(rolls):
+        embed.add_field(name=f"Roll {roll[0] + 1}", value=roll[1], inline=False)
+    embed.timestamp = datetime.datetime.now()
+    embed.set_footer(text=f"ran by {ctx.author.name}", icon_url="https://cdn.discordapp.com/avatars/{ctx.author.id}/{ctx.author.avatar}.png") # FIXME URL doesn't work
+    
+    await ctx.send(embed=embed)
 
-client.run(token)
+@roll.autocomplete("die") # TODO review this
+async def roll_autocompletion(interaction: discord.Interaction, current: str) -> typing.List[app_commands.Choice[str]]:
+    data = []
+    for die_choice in ['d100', 'd20', 'd12', 'd10', 'd8', 'd6', 'd4']:
+        if current.lower() in die_choice.lower():
+            data.append(app_commands.Choice(name=die_choice, value=die_choice))
+    
+    return data
+    
+bot.run(TOKEN)
