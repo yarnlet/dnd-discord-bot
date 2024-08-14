@@ -1,2 +1,0 @@
-token=TOKENGOESHERE
-verbose_mode=trueORfalse

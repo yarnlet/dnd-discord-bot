@@ -9,12 +9,21 @@ import random
 import datetime
 import typing
 from enum import Enum
+from classes import DiceType
+
+# commands (refactor if needed)
+from dice.command_roll import roll_command
+from dice.command_multiroll import multiroll_command
+
+# usermanager commands (refactor if needed)
+from user.command_genprofile import genprofile_command
+from user.command_userinfo import userinfo_command
 
 dotenv.load_dotenv() # NOTE to set the token, create your own .env file, and add the line "token=YOUR_TOKEN_HERE"
 TOKEN = os.getenv('token')
 VERBOSE_MODE = os.getenv('verbose_mode', 'false').lower() == 'true' # NOTE set this to True to enable verbose logging mode
 
-bot = commands.Bot(command_prefix='dnd ', help_command=None, intents=discord.Intents.default())
+bot = commands.Bot(command_prefix='dnd ', help_command=None, intents=discord.Intents.all()) # NOTE non slash commands are almost useless
 
 @bot.event
 async def on_ready():
@@ -27,22 +36,6 @@ async def on_ready():
         print(f'Connected to {len(guilds)} guilds!')
         for guild in guilds:
             print(f'  {guild.name} -> ({guild.id})')
-# dice roller
-
-# TODO please put these two in separate files; i'd like to have a system where we create a new python file for a command, and have one python file for class defs and stuff
-# this is why i like typescript more :/
-
-class DiceType(Enum):
-    D4 = 4
-    D6 = 6
-    D8 = 8
-    D10 = 10
-    D12 = 12
-    D20 = 20
-    def __str__(self):
-        return f'd{self.value}'
-    def roll(self):
-        return random.randint(1, self.value)
 
 @bot.hybrid_command(name="roll", description="Roll one or multiple dice")
 @app_commands.describe(
@@ -51,24 +44,33 @@ class DiceType(Enum):
     modifier='Modifier is applied after all dice have been rolled.'
 )
 async def roll(ctx, count: int, dice_type: DiceType, modifier: int):
-    embed=discord.Embed(
-        title="Dice Roller",
-        description=f'You rolled a {count}{dice_type} **{"+" if modifier >= 0 else "-"}{abs(modifier)}**. Let\'s see how it turned out',
-        color=discord.Color.red()
-        )
-    dicestring = ""
-    runningcount = 0
-    rolls = [dice_type.roll() for _ in range(count)] # roll the die the specified number of times
-    for dicenum in range(count):
-        runningcount += rolls[dicenum]
-        dicestring += f'Dice {dicenum + 1}: {rolls[dicenum]}\n'
-    embed.add_field(name="Dice Outcomes", value=dicestring, inline=False)
-    embed.add_field(name="Dice Total", value=f'Base: {runningcount}\nWith Modifier: {runningcount} **{"+" if modifier >= 0 else "-"}{abs(modifier)}** = {runningcount + modifier}', inline=True)
-    embed.timestamp = datetime.datetime.now()
+    await roll_command(ctx, count, dice_type, modifier) # SOURCE commands/command_roll.py
 
-    embed.set_footer(text=f"Ran by {ctx.author.name}", icon_url=ctx.author.avatar) # FIXME URL doesn't work
+@bot.hybrid_command(name="multiroll", description="Roll one of 2-5 different dice")
+@app_commands.describe(
+    die1='The first type of dice to roll.',
+    die2='The second type of dice to roll.',
+    die3='The optional third type of dice to roll.',
+    die4='The optional fourth type of dice to roll.',
+    die5='The optional fifth type of dice to roll.',
+    modifier='Modifier is applied after all dice have been rolled.'
+)
+async def multiroll(ctx, die1: DiceType, die2: DiceType, die3: DiceType=None, die4: DiceType=None, die5: DiceType=None, modifier: int=0):
+    await multiroll_command(ctx, die1, die2, die3, die4, die5, modifier) # SOURCE commands/command_multiroll.py
 
-    await ctx.send(embed=embed)
-    # await interaction.response.send_message(f'Okay, you rolled {count}{dice_type}')
+# TODO might remove this
+@bot.hybrid_command(name="genprofile", description="Generate a profile for a user")
+@app_commands.describe(
+    user='The user to generate a profile for.'
+)
+async def genprofile(ctx, user: discord.User):
+    await genprofile_command(ctx, user)
+
+@bot.hybrid_command(name="userinfo", description="Get a user's profile")
+@app_commands.describe(
+    user='The user to get the profile for.'
+)
+async def userinfo(ctx, user: discord.User):
+    await userinfo_command(ctx, user)
 
 bot.run(TOKEN)

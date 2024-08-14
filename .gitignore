@@ -1,2 +1,10 @@
+# IDE and configuration files
 .vscode/
 .env
+
+# pycaches
+__pycache__/
+commands/__pycache__/
+
+# Ignore Database files
+database/*
